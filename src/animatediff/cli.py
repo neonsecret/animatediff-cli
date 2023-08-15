@@ -43,6 +43,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+logger.setLevel(logging.DEBUG)
 
 try:
     from animatediff.rife import app as rife_app
@@ -313,7 +314,7 @@ def generate(
 
             # allow for reusing the same negative prompt(s) and seed(s) for multiple prompts
             n_prompt = model_config.n_prompt[idx % num_negatives]
-            seed = seed = model_config.seed[idx % num_seeds]
+            seed = model_config.seed[idx % num_seeds]
 
             # duplicated in run_inference, but this lets us use it for frame save dirs
             # TODO: Move gif Output out of run_inference...

@@ -1,25 +1,15 @@
 # animatediff
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/neggles/animatediff-cli/main.svg)](https://results.pre-commit.ci/latest/github/neggles/animatediff-cli/main)
 
-animatediff refactor, ~~because I can.~~ with significantly lower VRAM usage.
+animatediff refactor cli with significantly lower VRAM usage.
 
 Also, **infinite generation length support!** yay!
 
-# LoRA loading is ABSOLUTELY NOT IMPLEMENTED YET!
+### LoRA loading is not implemented yet
 
 This can theoretically run on CPU, but it's not recommended. Should work fine on a GPU, nVidia or otherwise,
 but I haven't tested on non-CUDA hardware. Uses PyTorch 2.0 Scaled-Dot-Product Attention (aka builtin xformers)
 by default, but you can pass `--xformers` to force using xformers if you *really* want.
-
-### How To Use
-
-1. Lie down
-2. Try not to cry
-3. Cry a lot
-
-### but for real?
-
-Okay, fine. But it's still a little complicated and there's no webUI yet.
 
 ```sh
 git clone https://github.com/neggles/animatediff-cli

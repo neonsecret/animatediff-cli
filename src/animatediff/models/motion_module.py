@@ -1,14 +1,76 @@
 import math
 from dataclasses import dataclass
 from typing import Optional
+from inspect import isfunction
 
 import torch
 import torch.nn.functional as F
 import xformers.ops as xops
-from diffusers.models.attention import Attention, FeedForward
-from diffusers.utils import BaseOutput, maybe_allow_in_graph
+# from diffusers.models.attention import Attention
+# from diffusers.utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import Tensor, nn
+
+
+def exists(val):
+    return val is not None
+
+
+def default(val, d):
+    if exists(val):
+        return val
+    return d() if isfunction(d) else d
+
+
+class AdvancedLinear(torch.nn.Module):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = torch.nn.Parameter(torch.empty((out_features, in_features), **factory_kwargs))
+        if bias:
+            self.bias = torch.nn.Parameter(torch.empty(out_features, **factory_kwargs))
+        else:
+            self.register_parameter('bias', None)
+
+    def forward(self, input):
+        return torch.nn.functional.linear(input, self.weight, self.bias)
+
+
+class GEGLU(nn.Module):
+    def __init__(self, dim_in, dim_out, dtype=None):
+        super().__init__()
+        self.proj = AdvancedLinear(dim_in, dim_out * 2, dtype=dtype)
+
+    def forward(self, x):
+        x, gate = self.proj(x).chunk(2, dim=-1)
+        return x * F.gelu(gate)
+
+
+class FeedForward(nn.Module):
+    def __init__(self, dim, dim_out=None, mult=4, glu=False, dropout=0., dtype=None):
+        super().__init__()
+        inner_dim = int(dim * mult)
+        dim_out = default(dim_out, dim)
+        project_in = nn.Sequential(
+            AdvancedLinear(dim, inner_dim, dtype=dtype),
+            nn.GELU()
+        ) if not glu else GEGLU(dim, inner_dim, dtype=dtype)
+
+        self.net = nn.ModuleList([])
+        # project in
+        self.net.append(project_in)
+        # project dropout
+        self.net.append(nn.Dropout(dropout))
+        # project out
+        self.net.append(AdvancedLinear(inner_dim, dim_out, dtype=dtype))
+
+    def forward(self, hidden_states):
+        for module in self.net:
+            hidden_states = module(hidden_states)
+        return hidden_states
 
 
 def zero_module(module):
@@ -19,7 +81,7 @@ def zero_module(module):
 
 
 @dataclass
-class TemporalTransformer3DModelOutput(BaseOutput):
+class TemporalTransformer3DModelOutput:
     sample: torch.FloatTensor
 
 
@@ -70,7 +132,7 @@ class VanillaTemporalModule(nn.Module):
         return output
 
 
-@maybe_allow_in_graph
+# @maybe_allow_in_graph
 class TemporalTransformer3DModel(nn.Module):
     def __init__(
         self,
@@ -161,7 +223,7 @@ class TemporalTransformer3DModel(nn.Module):
         return output
 
 
-@maybe_allow_in_graph
+# @maybe_allow_in_graph
 class TemporalTransformerBlock(nn.Module):
     def __init__(
         self,
@@ -208,7 +270,7 @@ class TemporalTransformerBlock(nn.Module):
         self.attention_blocks = nn.ModuleList(attention_blocks)
         self.norms = nn.ModuleList(norms)
 
-        self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn)
+        self.ff = FeedForward(dim, dropout=dropout, glu=(activation_fn == "geglu"))
         self.ff_norm = nn.LayerNorm(dim)
 
     def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None, video_length=None):
@@ -247,16 +309,113 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-@maybe_allow_in_graph
-class VersatileAttention(Attention):
+class CrossAttentionPytorch(nn.Module):
+    def __init__(self, query_dim, cross_attention_dim=None, heads=8, dim_head=64, dropout=0., dtype=None, bias=False):
+        super().__init__()
+        inner_dim = dim_head * heads
+        cross_attention_dim = default(cross_attention_dim, query_dim)
+
+        self.heads = heads
+        self.dim_head = dim_head
+
+        self.to_q = AdvancedLinear(query_dim, inner_dim, bias=bias, dtype=dtype)
+        self.to_k = AdvancedLinear(cross_attention_dim, inner_dim, bias=bias, dtype=dtype)
+        self.to_v = AdvancedLinear(cross_attention_dim, inner_dim, bias=bias, dtype=dtype)
+
+        self.to_out = nn.Sequential(AdvancedLinear(inner_dim, query_dim, dtype=dtype), nn.Dropout(dropout))
+        self.attention_op = None
+
+    def forward(self, x, context=None, value=None, mask=None):
+        q = self.to_q(x)
+        context = default(context, x)
+        k = self.to_k(context)
+        if value is not None:
+            v = self.to_v(value)
+            del value
+        else:
+            v = self.to_v(context)
+
+        b, _, _ = q.shape
+        q, k, v = map(
+            lambda t: t.view(b, -1, self.heads, self.dim_head).transpose(1, 2),
+            (q, k, v),
+        )
+
+        out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
+
+        if exists(mask):
+            raise NotImplementedError
+        out = (
+            out.transpose(1, 2).reshape(b, -1, self.heads * self.dim_head)
+        )
+
+        return self.to_out(out)
+
+
+class MemoryEfficientCrossAttention(nn.Module):
+    # https://github.com/MatthieuTPHR/diffusers/blob/d80b531ff8060ec1ea982b65a1b8df70f73aa67c/src/diffusers/models/attention.py#L223
+    def __init__(self, query_dim, cross_attention_dim=None, heads=8, dim_head=64, dropout=0.0, dtype=None, bias=False):
+        super().__init__()
+        # print(f"Setting up {self.__class__.__name__}. Query dim is {query_dim}, context_dim is {cross_attention_dim} and using "
+        #       f"{heads} heads.")
+        inner_dim = dim_head * heads
+        cross_attention_dim = default(cross_attention_dim, query_dim)
+
+        self.heads = heads
+        self.dim_head = dim_head
+
+        self.to_q = AdvancedLinear(query_dim, inner_dim, bias=bias, dtype=dtype)
+        self.to_k = AdvancedLinear(cross_attention_dim, inner_dim, bias=bias, dtype=dtype)
+        self.to_v = AdvancedLinear(cross_attention_dim, inner_dim, bias=bias, dtype=dtype)
+
+        self.to_out = nn.Sequential(AdvancedLinear(inner_dim, query_dim, dtype=dtype), nn.Dropout(dropout))
+        self.attention_op = None
+
+    def compute_attention(self, x, context=None, value=None, mask=None):
+        q = self.to_q(x)
+        context = default(context, x)
+        k = self.to_k(context)
+        if value is not None:
+            v = self.to_v(value)
+            del value
+        else:
+            v = self.to_v(context)
+
+        b, _, _ = q.shape
+        q, k, v = map(
+            lambda t: t.unsqueeze(3)
+            .reshape(b, t.shape[1], self.heads, self.dim_head)
+            .permute(0, 2, 1, 3)
+            .reshape(b * self.heads, t.shape[1], self.dim_head)
+            .contiguous(),
+            (q, k, v),
+        )
+
+        # actually compute the attention, what we cannot get enough of
+        out = xops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
+
+        if exists(mask):
+            raise NotImplementedError
+        out = (
+            out.unsqueeze(0)
+            .reshape(b, self.heads, out.shape[1], self.dim_head)
+            .permute(0, 2, 1, 3)
+            .reshape(b, out.shape[1], self.heads * self.dim_head)
+        )
+        return self.to_out(out)
+
+
+# @maybe_allow_in_graph
+class VersatileAttention(MemoryEfficientCrossAttention):
     def __init__(
         self,
         attention_mode: str = None,
         cross_frame_attention_mode: Optional[str] = None,
         temporal_position_encoding: bool = False,
         temporal_position_encoding_max_len: int = 24,
+        upcast_attention=False,
         *args,
-        **kwargs,
+        **kwargs
     ):
         super().__init__(*args, **kwargs)
         if attention_mode.lower() != "temporal":
@@ -293,7 +452,10 @@ class VersatileAttention(Attention):
             raise NotImplementedError
 
         # attention processor makes this easy so that's nice
-        hidden_states = self.processor(self, hidden_states, encoder_hidden_states, attention_mask)
+        hidden_states = self.compute_attention(hidden_states,
+                                               context=encoder_hidden_states,
+                                               value=encoder_hidden_states,
+                                               mask=attention_mask)
 
         if self.attention_mode == "Temporal":
             hidden_states = rearrange(hidden_states, "(b d) f c -> (b f) d c", d=d)
