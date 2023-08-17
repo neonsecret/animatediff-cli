@@ -4,15 +4,18 @@ from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+from torch import Tensor
+
+from animatediff.models.utils import Timesteps, TimestepEmbedding
+from safetensors.torch import load_file
 
 import torch
+import torch.nn as nn
 import torch.utils.checkpoint
+import logging
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models import ModelMixin
-from diffusers.models.embeddings import TimestepEmbedding, Timesteps
-from diffusers.utils import SAFETENSORS_WEIGHTS_NAME, WEIGHTS_NAME, BaseOutput, logging
-from safetensors.torch import load_file
-from torch import Tensor, nn
+from diffusers.utils import SAFETENSORS_WEIGHTS_NAME, WEIGHTS_NAME
 
 from .resnet import InflatedConv3d
 from .unet_blocks import (
@@ -25,11 +28,12 @@ from .unet_blocks import (
     get_up_block,
 )
 
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 @dataclass
-class UNet3DConditionOutput(BaseOutput):
+class UNet3DConditionOutput:
     sample: torch.FloatTensor
 
 
@@ -81,12 +85,14 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         motion_module_mid_block=False,
         motion_module_decoder_only=False,
         motion_module_type=None,
-        motion_module_kwargs={},
+        motion_module_kwargs=None,
         unet_use_cross_frame_attention=None,
         unet_use_temporal_attention=None,
     ):
         super().__init__()
 
+        if motion_module_kwargs is None:
+            motion_module_kwargs = {}
         self.sample_size = sample_size
         time_embed_dim = block_out_channels[0] * 4
 
@@ -122,7 +128,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         # down
         output_channel = block_out_channels[0]
         for i, down_block_type in enumerate(down_block_types):
-            res = 2**i
+            res = 2 ** i
             input_channel = output_channel
             output_channel = block_out_channels[i]
             is_final_block = i == len(block_out_channels) - 1
@@ -148,8 +154,8 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                 unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                 unet_use_temporal_attention=unet_use_temporal_attention,
                 use_motion_module=use_motion_module
-                and (res in motion_module_resolutions)
-                and (not motion_module_decoder_only),
+                                  and (res in motion_module_resolutions)
+                                  and (not motion_module_decoder_only),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
             )
@@ -334,7 +340,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layears).
         # However, the upsampling interpolation output size can be forced to fit any upsampling size
         # on the fly if necessary.
-        default_overall_up_factor = 2**self.num_upsamplers
+        default_overall_up_factor = 2 ** self.num_upsamplers
 
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
@@ -449,7 +455,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         for i, upsample_block in enumerate(self.up_blocks):
             is_final_block = i == len(self.up_blocks) - 1
 
-            res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
+            res_samples = down_block_res_samples[-len(upsample_block.resnets):]
             down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
             # if we have not reached the final block and need to forward the
@@ -481,7 +487,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         sample = self.conv_out(sample)
 
         if not return_dict:
-            return (sample,)
+            return sample,
 
         return UNet3DConditionOutput(sample=sample)
 

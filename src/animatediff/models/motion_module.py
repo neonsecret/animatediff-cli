@@ -6,8 +6,6 @@ from inspect import isfunction
 import torch
 import torch.nn.functional as F
 import xformers.ops as xops
-# from diffusers.models.attention import Attention
-# from diffusers.utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import Tensor, nn
 
@@ -325,7 +323,7 @@ class CrossAttentionPytorch(nn.Module):
         self.to_out = nn.Sequential(AdvancedLinear(inner_dim, query_dim, dtype=dtype), nn.Dropout(dropout))
         self.attention_op = None
 
-    def forward(self, x, context=None, value=None, mask=None):
+    def compute_attention(self, x, context=None, value=None, mask=None):
         q = self.to_q(x)
         context = default(context, x)
         k = self.to_k(context)
@@ -406,7 +404,7 @@ class MemoryEfficientCrossAttention(nn.Module):
 
 
 # @maybe_allow_in_graph
-class VersatileAttention(MemoryEfficientCrossAttention):
+class VersatileAttention(CrossAttentionPytorch):
     def __init__(
         self,
         attention_mode: str = None,

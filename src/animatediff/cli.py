@@ -5,7 +5,6 @@ from typing import Annotated, Optional
 
 import torch
 import typer
-from diffusers.utils.logging import set_verbosity_error as set_diffusers_verbosity_error
 from rich.logging import RichHandler
 
 from animatediff import __version__, console, get_dir
@@ -242,7 +241,7 @@ def generate(
     """
 
     # be quiet, diffusers. we care not for your safety checker
-    set_diffusers_verbosity_error()
+    # set_diffusers_verbosity_error()
 
     config_path = config_path.absolute()
     logger.info(f"Using generation config: {path_from_cwd(config_path)}")
