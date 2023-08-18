@@ -68,7 +68,6 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
         init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
 
         t_start = max(num_inference_steps - init_timestep, 0)
-        print(num_inference_steps, t_start, len(self.scheduler.timesteps))
         timesteps = self.scheduler.timesteps[t_start * self.scheduler.order:]
 
         return timesteps, num_inference_steps - t_start
@@ -666,7 +665,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
 
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=len(timesteps)) as progress_bar:
+        with self.progress_bar(total=total_steps * strength) as progress_bar:
             for i, t in enumerate(timesteps):
                 noise_pred = torch.zeros(
                     (latents.shape[0] * (2 if do_classifier_free_guidance else 1), *latents.shape[1:]),
