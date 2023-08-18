@@ -5,6 +5,7 @@ from typing import Annotated, Optional
 
 import torch
 import typer
+from PIL import Image
 from rich.logging import RichHandler
 
 from animatediff import __version__, console, get_dir
@@ -92,7 +93,7 @@ def generate(
         typer.Option(
             "--width",
             "-W",
-            min=512,
+            min=384,
             max=3840,
             help="Width of generated frames",
             rich_help_panel="Generation",
@@ -103,7 +104,7 @@ def generate(
         typer.Option(
             "--height",
             "-H",
-            min=512,
+            min=384,
             max=2160,
             help="Height of generated frames",
             rich_help_panel="Generation",
@@ -297,6 +298,7 @@ def generate(
     num_prompts = len(model_config.prompt)
     num_negatives = len(model_config.n_prompt)
     num_seeds = len(model_config.seed)
+    num_init_imgs = len(model_config.init_image_path)
     gen_total = num_prompts * repeats  # total number of generations
 
     logger.info("Initialization complete!")
@@ -314,6 +316,8 @@ def generate(
             # allow for reusing the same negative prompt(s) and seed(s) for multiple prompts
             n_prompt = model_config.n_prompt[idx % num_negatives]
             seed = model_config.seed[idx % num_seeds]
+            init_image = Image.open(model_config.init_image_path[idx % num_init_imgs]).resize((width, height))
+            strength = model_config.strength
 
             # duplicated in run_inference, but this lets us use it for frame save dirs
             # TODO: Move gif Output out of run_inference...
@@ -325,6 +329,7 @@ def generate(
                 pipeline=pipeline,
                 prompt=prompt,
                 n_prompt=n_prompt,
+                init_image=init_image,
                 seed=seed,
                 steps=model_config.steps,
                 guidance_scale=model_config.guidance_scale,
@@ -337,6 +342,7 @@ def generate(
                 context_overlap=overlap,
                 context_stride=stride,
                 clip_skip=model_config.clip_skip,
+                strength=strength
             )
             outputs.append(output)
             torch.cuda.empty_cache()

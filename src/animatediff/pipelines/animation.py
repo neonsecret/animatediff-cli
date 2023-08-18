@@ -68,6 +68,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
         init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
 
         t_start = max(num_inference_steps - init_timestep, 0)
+        print(num_inference_steps, t_start, len(self.scheduler.timesteps))
         timesteps = self.scheduler.timesteps[t_start * self.scheduler.order:]
 
         return timesteps, num_inference_steps - t_start
@@ -548,6 +549,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
+        init_image: Optional[Image] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
         num_inference_steps: int = 50,
@@ -570,7 +572,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
         context_overlap: int = 4,
         context_schedule: str = "uniform",
         clip_skip: int = 1,
-        strength=0.65,
+        strength=1,
         **kwargs,
     ):
         # Default height and width to unet
@@ -615,9 +617,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
             lora_scale=text_encoder_lora_scale,
             clip_skip=clip_skip,
         )
-        image = self.image_processor.preprocess(Image.open("C:/Users/neon/Downloads/Telegram Desktop/IMG_1778.PNG")
-                                                .resize((576, 768)))
-        # 4. Prepare timesteps
+        num_channels_latents = self.unet.config.in_channels
         self.scheduler.set_timesteps(num_inference_steps, device=latents_device)
         timesteps = self.scheduler.timesteps
         context_scheduler = get_context_scheduler(context_schedule)
@@ -630,24 +630,36 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
             context_stride,
             context_overlap,
         )
-        timesteps, num_inference_steps = self.get_timesteps(total_steps, strength, device)
-        latent_timestep = timesteps[:1].repeat(batch_size)
+        if init_image is not None:
+            image = self.image_processor.preprocess(init_image)
+            timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength, device)
+            latent_timestep = timesteps[:1].repeat(batch_size)
 
-        # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents_img2img(
-            image,
-            latent_timestep,
-            batch_size * num_videos_per_prompt,
-            num_channels_latents,
-            video_length,
-            height,
-            width,
-            prompt_embeds.dtype,
-            latents_device,  # keep latents on cpu for sequential mode
-            generator,
-            latents,
-        )
+            latents = self.prepare_latents_img2img(
+                image,
+                latent_timestep,
+                batch_size * num_videos_per_prompt,
+                num_channels_latents,
+                video_length,
+                height,
+                width,
+                prompt_embeds.dtype,
+                latents_device,  # keep latents on cpu for sequential mode
+                generator,
+                latents,
+            )
+        else:
+            latents = self.prepare_latents(
+                batch_size * num_videos_per_prompt,
+                num_channels_latents,
+                video_length,
+                height,
+                width,
+                prompt_embeds.dtype,
+                latents_device,  # keep latents on cpu for sequential mode
+                generator,
+                latents,
+            )
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
