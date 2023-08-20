@@ -25,7 +25,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 from animatediff.pipelines import AnimationPipeline
 from animatediff.models.unet import UNet3DConditionModel
-from animatediff.train_utils.dataset import TuneAVideoDataset
+from animatediff.train_utils.dataset import YoutubeTuneAVideoDataset
 from animatediff.train_utils.util import save_videos_grid, ddim_inversion
 from einops import rearrange
 
@@ -113,6 +113,7 @@ def main(
                                                    unet_additional_kwargs=OmegaConf.to_container(
                                                        inference_config.unet_additional_kwargs))
 
+
     motion_module_state_dict = torch.load(motion_module, map_location="cpu")
     if "global_step" in motion_module_state_dict: func_args.update(
         {"global_step": motion_module_state_dict["global_step"]})
@@ -165,13 +166,7 @@ def main(
     )
 
     # Get the training dataset
-    train_dataset = TuneAVideoDataset(**train_data)
-
-    # Preprocessing the dataset
-    train_dataset.prompt_ids = tokenizer(
-        train_dataset.prompt, max_length=tokenizer.model_max_length, padding="max_length", truncation=True,
-        return_tensors="pt"
-    ).input_ids[0]
+    train_dataset = YoutubeTuneAVideoDataset(**train_data, tokenizer=tokenizer)
 
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
@@ -385,7 +380,7 @@ def save_checkpoint(unet, mm_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="./configs/tuneavideo.yaml")
+    parser.add_argument("--config", type=str, default="./config/train/train.yaml")
     args = parser.parse_args()
 
     main(**OmegaConf.load(args.config))
