@@ -30,8 +30,8 @@ noise_scheduler_kwargs:
 train_data:
   csv_path: "D:/datasets/test.csv"
   n_sample_frames: 8
-  width: 256
-  height: 256
+  width: 512
+  height: 512
   sample_start_idx: 0
   sample_frame_rate: 1
 

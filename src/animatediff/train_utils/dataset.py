@@ -1,3 +1,4 @@
+import os.path
 import threading
 import decord
 import torch
@@ -23,6 +24,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         sample_start_idx: int = 0,
         sample_frame_rate: int = 1,
         filename: str = "tmp.mp4",
+        store_dir: str = "tmp/"
     ):
         df = pd.read_csv(csv_path, header=None)
         self.items = df.to_dict('records')
@@ -32,7 +34,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         self.n_sample_frames = n_sample_frames
         self.sample_start_idx = sample_start_idx
         self.sample_frame_rate = sample_frame_rate
-        self.filename = filename
+        self.filename = os.path.join(store_dir, filename)
 
         self.pixel_transforms = transforms.Compose([
             transforms.RandomHorizontalFlip(),

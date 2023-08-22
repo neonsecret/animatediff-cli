@@ -204,6 +204,10 @@ def main(
                 break
 
     trainable_params = list(filter(lambda p: p.requires_grad, unet.parameters()))
+
+    if scale_lr:
+        learning_rate = (learning_rate * gradient_accumulation_steps * train_batch_size * num_processes)
+
     optimizer = torch.optim.AdamW(
         trainable_params,
         lr=learning_rate,
@@ -260,9 +264,6 @@ def main(
     if checkpointing_steps == -1:
         assert checkpointing_epochs != -1
         checkpointing_steps = checkpointing_epochs * len(train_dataloader)
-
-    if scale_lr:
-        learning_rate = (learning_rate * gradient_accumulation_steps * train_batch_size * num_processes)
 
     # Scheduler
     lr_scheduler = get_scheduler(
