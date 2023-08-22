@@ -5,6 +5,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+from PIL import Image
 from pydantic import BaseConfig, BaseSettings, Field
 from pydantic.env_settings import (
     EnvSettingsSource,
@@ -109,6 +110,8 @@ class ModelConfig(BaseSettings):
     clip_skip: int = 1  # skip the last N-1 layers of the CLIP text encoder
     prompt: list[str] = Field([])  # Prompt(s) to use
     n_prompt: list[str] = Field([])  # Anti-prompt(s) to use
+    init_image_path: list[str] = Field([])
+    strength: float = 1.0
 
     class Config(JsonConfig):
         json_config_path: Path

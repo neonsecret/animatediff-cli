@@ -128,6 +128,7 @@ def run_inference(
     pipeline: AnimationPipeline,
     prompt: str = ...,
     n_prompt: str = ...,
+    init_image=None,
     seed: int = -1,
     steps: int = 25,
     guidance_scale: float = 7.5,
@@ -142,6 +143,7 @@ def run_inference(
     context_schedule: str = "uniform",
     clip_skip: int = 1,
     return_dict: bool = False,
+    strength: int = 1
 ):
     out_dir = Path(out_dir)  # ensure out_dir is a Path
 
@@ -153,6 +155,7 @@ def run_inference(
     pipeline_output = pipeline(
         prompt=prompt,
         negative_prompt=n_prompt,
+        init_image=init_image,
         num_inference_steps=steps,
         guidance_scale=guidance_scale,
         width=width,
@@ -164,6 +167,7 @@ def run_inference(
         context_overlap=context_overlap,
         context_schedule=context_schedule,
         clip_skip=clip_skip,
+        strength=strength
     )
     logger.info("Generation complete, saving...")
 
