@@ -548,7 +548,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
-        init_image: Optional[Image] = None,
+        init_image: Image = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
         num_inference_steps: int = 50,

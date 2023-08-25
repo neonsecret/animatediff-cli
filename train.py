@@ -442,10 +442,8 @@ def main(
                 generator = torch.Generator(device=latents.device)
                 generator.manual_seed(global_seed)
 
-                height = train_data.sample_size[0] if not isinstance(train_data.sample_size,
-                                                                     int) else train_data.sample_size
-                width = train_data.sample_size[1] if not isinstance(train_data.sample_size,
-                                                                    int) else train_data.sample_size
+                height = train_data.height
+                width = train_data.width
 
                 prompts = validation_data.prompts[:2] if global_step < 1000 and (
                     not image_finetune) else validation_data.prompts

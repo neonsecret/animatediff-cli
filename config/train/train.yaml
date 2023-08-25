@@ -1,7 +1,7 @@
 image_finetune: false
 
 output_dir: "outputs"
-pretrained_model_path: "data/models/huggingface/runwayml/stable-diffusion-v1-5"
+pretrained_model_path: "data/models/huggingface/stable-diffusion-v1-5"
 
 unet_additional_kwargs:
   use_motion_module: true
@@ -34,6 +34,7 @@ train_data:
   height: 512
   sample_start_idx: 0
   sample_frame_rate: 1
+  sample_n_frames: 16
 
 validation_data:
   prompts:
@@ -41,7 +42,7 @@ validation_data:
     - "A drone view of celebration with Christma tree and fireworks, starry sky - background."
     - "Robot dancing in times square."
     - "Pacific coast, carmel by the sea ocean and waves."
-  num_inference_steps: 25
+  num_inference_rps: 25
   guidance_scale: 8.
 
 trainable_modules:
@@ -50,7 +51,7 @@ trainable_modules:
 unet_checkpoint_path: ""
 
 learning_rate: 1.e-4
-train_batch_size: 4
+train_batch_size: 3
 
 max_train_epoch: -1
 max_train_steps: 100

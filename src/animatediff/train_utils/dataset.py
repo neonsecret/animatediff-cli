@@ -1,4 +1,5 @@
 import os.path
+import random
 import threading
 import decord
 import torch
@@ -24,10 +25,13 @@ class YoutubeTuneAVideoDataset(Dataset):
         sample_start_idx: int = 0,
         sample_frame_rate: int = 1,
         filename: str = "tmp.mp4",
-        store_dir: str = "tmp/"
+        store_dir: str = "tmp/",
+        *args,
+        **kwargs
     ):
         df = pd.read_csv(csv_path, header=None)
         self.items = df.to_dict('records')
+        random.shuffle(self.items)
 
         self.width = width
         self.height = height
@@ -35,6 +39,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         self.sample_start_idx = sample_start_idx
         self.sample_frame_rate = sample_frame_rate
         self.filename = os.path.join(store_dir, filename)
+        os.makedirs(store_dir, exist_ok=True)
 
         self.pixel_transforms = transforms.Compose([
             transforms.RandomHorizontalFlip(),
@@ -55,10 +60,13 @@ class YoutubeTuneAVideoDataset(Dataset):
         return caption
 
     def __getitem__(self, index):
-        filename = self.filename + str(threading.get_ident())
+        filename = self.filename.split(".mp4")[0] + str(threading.get_ident()) + ".mp4"
         # load and sample video frames
-        text = self.fetch_video(index, filename)
-        vr = decord.VideoReader(filename, width=self.width, height=self.height)
+        try:
+            text = self.fetch_video(index, filename)
+            vr = decord.VideoReader(filename, width=self.width, height=self.height)
+        except:
+            return self.__getitem__(index + 1)
         sample_index = list(range(self.sample_start_idx, len(vr), self.sample_frame_rate))[:self.n_sample_frames]
         video = vr.get_batch(sample_index)
 
