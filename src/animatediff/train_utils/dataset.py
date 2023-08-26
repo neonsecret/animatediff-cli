@@ -4,6 +4,7 @@ import threading
 import decord
 import torch
 import ffmpeg
+import shutil
 
 import pandas as pd
 import torchvision.transforms as transforms
@@ -40,6 +41,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         self.sample_start_idx = sample_start_idx
         self.sample_frame_rate = sample_frame_rate
         self.filename = os.path.join(store_dir, filename)
+        self.store_dir = store_dir
         os.makedirs(store_dir, exist_ok=True)
 
         self.pixel_transforms = transforms.Compose([
@@ -48,6 +50,13 @@ class YoutubeTuneAVideoDataset(Dataset):
             transforms.CenterCrop(width),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
         ])
+
+    def cleanup_if_full(self, limit=20):
+        cache_size = sum(os.path.getsize(os.path.join(dirpath, filename)) for dirpath, dirnames, filenames in
+                         os.walk(self.store_dir) for filename in filenames) // (1024 ** 3)
+        if cache_size > limit:
+            shutil.rmtree(self.store_dir)
+            os.makedirs(self.store_dir, exist_ok=True)
 
     def __len__(self):
         return len(self.items)
@@ -78,6 +87,8 @@ class YoutubeTuneAVideoDataset(Dataset):
         return caption, filename
 
     def __getitem__(self, index):
+        self.cleanup_if_full()
+
         # load and sample video frames
         try:
             text, filename = self.fetch_video(index, self.filename)

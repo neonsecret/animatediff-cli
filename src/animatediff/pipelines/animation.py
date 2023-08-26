@@ -571,7 +571,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
         context_overlap: int = 4,
         context_schedule: str = "uniform",
         clip_skip: int = 1,
-        strength=1,
+        strength=1.0,
         **kwargs,
     ):
         # Default height and width to unet
