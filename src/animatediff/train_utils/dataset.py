@@ -3,6 +3,7 @@ import random
 import threading
 import decord
 import torch
+import ffmpeg
 
 import pandas as pd
 import torchvision.transforms as transforms
@@ -54,16 +55,32 @@ class YoutubeTuneAVideoDataset(Dataset):
     def fetch_video(self, index, filename):
         video_idx = self.items[index][0]
         caption = self.items[index][3]
+        # start, end = self.items[index][1] / 1e+06, self.items[index][2] / 1e+06
 
-        YouTube(f'https://youtu.be/{video_idx}').streams.get_by_resolution("360p").download(filename=filename)
+        filename = filename.replace("tmp.mp4", f"{video_idx}.mp4")
 
-        return caption
+        if os.path.exists(filename):
+            return caption, filename
+
+        # start_filename = filename.replace(".mp4", "raw.mp4")
+
+        s = YouTube(f'https://youtu.be/{video_idx}').streams.get_by_resolution("360p")
+        s.download(filename=filename)
+        # (
+        #     ffmpeg
+        #     .input(start_filename)
+        #     .trim(start_frame=start, end_frame=end)
+        #     .output(filename, loglevel="quiet")
+        #     .run(overwrite_output=True)
+        # )
+        # os.remove(start_filename)
+
+        return caption, filename
 
     def __getitem__(self, index):
-        filename = self.filename.split(".mp4")[0] + str(threading.get_ident()) + ".mp4"
         # load and sample video frames
         try:
-            text = self.fetch_video(index, filename)
+            text, filename = self.fetch_video(index, self.filename)
             vr = decord.VideoReader(filename, width=self.width, height=self.height)
         except:
             return self.__getitem__(index + 1)
@@ -87,4 +104,4 @@ if __name__ == '__main__':
     d = YoutubeTuneAVideoDataset("D:/datasets/test.csv")
     dataloader = torch.utils.data.DataLoader(d, batch_size=4, num_workers=16)
     for idx, batch in enumerate(dataloader):
-        print(batch["pixel_values"].shape, len(batch["prompt_ids"]))
+        print(batch["pixel_values"].shape, len(batch["text"]))

@@ -40,10 +40,9 @@ validation_data:
   prompts:
     - "Snow rocky mountains peaks canyon. Snow blanketed rocky mountains surround and shadow deep canyons."
     - "A drone view of celebration with Christma tree and fireworks, starry sky - background."
-    - "Robot dancing in times square."
-    - "Pacific coast, carmel by the sea ocean and waves."
-  num_inference_rps: 25
+  num_inference_steps: 25
   guidance_scale: 8.
+  context_frames: 16
 
 trainable_modules:
   - "motion_modules."

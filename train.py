@@ -28,8 +28,9 @@ from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
 
-from transformers import CLIPTextModel, CLIPTokenizer, CLIPImageProcessor
+from transformers import CLIPTokenizer, CLIPImageProcessor
 
+from animatediff.models.clip import CLIPSkipTextModel
 from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines import AnimationPipeline
 
@@ -168,7 +169,7 @@ def main(
 
     vae = AutoencoderKL.from_pretrained(pretrained_model_path, subfolder="vae")
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(pretrained_model_path, subfolder="text_encoder")
+    text_encoder = CLIPSkipTextModel.from_pretrained(pretrained_model_path, subfolder="text_encoder")
     feature_extractor = CLIPImageProcessor.from_pretrained(pretrained_model_path, subfolder="feature_extractor")
     if not image_finetune:
         unet = UNet3DConditionModel.from_pretrained_2d(
@@ -285,7 +286,6 @@ def main(
             unet=unet, vae=vae, tokenizer=tokenizer, text_encoder=text_encoder, scheduler=noise_scheduler,
             safety_checker=None
         )
-    validation_pipeline.enable_vae_slicing()
 
     # DDP warpper
     unet.to(local_rank)
@@ -452,7 +452,7 @@ def main(
                     if not image_finetune:
                         sample = validation_pipeline(
                             prompt,
-                            generator=generator,
+                            # generator=generator,
                             video_length=train_data.sample_n_frames,
                             height=height,
                             width=width,
@@ -464,7 +464,7 @@ def main(
                     else:
                         sample = validation_pipeline(
                             prompt,
-                            generator=generator,
+                            # generator=generator,
                             height=height,
                             width=width,
                             num_inference_steps=validation_data.get("num_inference_steps", 25),
