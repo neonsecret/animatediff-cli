@@ -330,20 +330,20 @@ def main(
                 batch['text'] = [name if random.random() > cfg_random_null_text_ratio else "" for name in batch['text']]
 
             # Data batch sanity check
-            if epoch == first_epoch and step == 0:
-                pixel_values, texts = batch['pixel_values'].cpu(), batch['text']
-                if not image_finetune:
-                    pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
-                    for idx, (pixel_value, text) in enumerate(zip(pixel_values, texts)):
-                        pixel_value = pixel_value[None, ...]
-                        save_videos_grid(pixel_value,
-                                         f"{output_dir}/sanity_check/{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_rank}-{idx}'}.gif",
-                                         rescale=True)
-                else:
-                    for idx, (pixel_value, text) in enumerate(zip(pixel_values, texts)):
-                        pixel_value = pixel_value / 2. + 0.5
-                        torchvision.utils.save_image(pixel_value,
-                                                     f"{output_dir}/sanity_check/{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_rank}-{idx}'}.png")
+            # if epoch == first_epoch and step == 0:
+            #     pixel_values, texts = batch['pixel_values'].cpu(), batch['text']
+            #     if not image_finetune:
+            #         pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
+            #         for idx, (pixel_value, text) in enumerate(zip(pixel_values, texts)):
+            #             pixel_value = pixel_value[None, ...]
+            #             save_videos_grid(pixel_value,
+            #                              f"{output_dir}/sanity_check/{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_rank}-{idx}'}.gif",
+            #                              rescale=True)
+            #     else:
+            #         for idx, (pixel_value, text) in enumerate(zip(pixel_values, texts)):
+            #             pixel_value = pixel_value / 2. + 0.5
+            #             torchvision.utils.save_image(pixel_value,
+            #                                          f"{output_dir}/sanity_check/{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_rank}-{idx}'}.png")
 
             ### >>>> Training >>>> ###
 
@@ -378,10 +378,8 @@ def main(
             # (this is the forward diffusion process)
             noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-            init_timestep = min(int(noise_scheduler.config.num_train_timesteps * train_strength), noise_scheduler.config.num_train_timesteps)
-            t_start = max(noise_scheduler.config.num_train_timesteps - init_timestep, 0)
-            latent_timestep = noise_scheduler.timesteps[t_start * noise_scheduler.order:][:1].repeat(train_batch_size)
-            noisy_first_frames = noise_scheduler.add_noise(latents, noise, latent_timestep)
+            latent_timestep = timesteps[:1].repeat(bsz)
+            noisy_first_frames = noise_scheduler.add_noise(first_frames, noise, latent_timestep)
 
             # Get the text embedding for conditioning
             with torch.no_grad():
@@ -468,7 +466,7 @@ def main(
                             height=height,
                             width=width,
                             strength=train_strength,
-                            init_image=PIL.Image.open(validation_data.init_test_image).resize((width, height)),
+                            init_image=PIL.Image.open(validation_data.init_test_image).convert("RGB").resize((width, height)),
                             **validation_data,
                         ).videos
                         save_videos_grid(sample, f"{output_dir}/samples/sample-{global_step}/{idx}.gif")

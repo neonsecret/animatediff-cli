@@ -55,6 +55,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         cache_size = sum(os.path.getsize(os.path.join(dirpath, filename)) for dirpath, dirnames, filenames in
                          os.walk(self.store_dir) for filename in filenames) // (1024 ** 3)
         if cache_size > limit:
+            print("Clearing cache")
             shutil.rmtree(self.store_dir)
             os.makedirs(self.store_dir, exist_ok=True)
 

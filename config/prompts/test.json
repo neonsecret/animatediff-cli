@@ -1,0 +1,22 @@
+{
+  "name": "RealisticVision",
+  "base": "",
+  "path": "models/sd/aZovyaRPGArtistTools_v3.safetensors",
+  "motion_module": "models/motion-module/mm_sd_v15.safetensors",
+  "seed": [
+    1897357888
+  ],
+  "scheduler": "ddim",
+  "steps": 25,
+  "guidance_scale": 7.5,
+  "strength": 0.8,
+  "prompt": [
+    "(absurdres, masterpiece, best quality, wallpaper, 8k), 1girl, standing in the mountain river, river flow, mountains in background surrounding the image peacefully, beautiful, bathing, beautiful mountains, realistic reflections"
+  ],
+  "n_prompt": [
+    "(worse quality, low quality:1.2), normal quality, bad quality, glitch, watermark, extra hands, fused fingers, fused hands, deformed, (fused nipples), poorly drawn face, (poorly drawn nipples)"
+  ],
+  "init_image_path": [
+    "C:\\Users\\neon\\Downloads\\Telegram Desktop/alexandrabuzuk-02-07-2023-0001.jpg"
+  ]
+}
