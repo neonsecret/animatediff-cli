@@ -3,7 +3,7 @@
 import inspect
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -19,7 +19,9 @@ from einops import rearrange
 from tqdm.rich import tqdm
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
+from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines.context import get_context_scheduler, get_total_steps
+from animatediff.train_utils.util import save_videos_grid
 from animatediff.utils.model import nop_train
 
 logger = logging.getLogger(__name__)
@@ -276,6 +278,12 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
         context_schedule: str = "uniform",
         clip_skip: int = 1,
         strength=1.0,
+        original_size: Optional[Tuple[int, int]] = None,
+        crops_coords_top_left: Tuple[int, int] = (0, 0),
+        target_size: Optional[Tuple[int, int]] = None,
+        negative_original_size: Optional[Tuple[int, int]] = None,
+        negative_crops_coords_top_left: Tuple[int, int] = (0, 0),
+        negative_target_size: Optional[Tuple[int, int]] = None,
         **kwargs,
     ):
         # Default height and width to unet
@@ -325,9 +333,12 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
             negative_prompt_embeds=negative_prompt_embeds,
             lora_scale=text_encoder_lora_scale,
         )
+        prompt_embeds = prompt_embeds.to(self.unet.dtype)
+
         num_channels_latents = self.unet.config.in_channels
         self.scheduler.set_timesteps(num_inference_steps, device=latents_device)
         timesteps = self.scheduler.timesteps
+
         context_scheduler = get_context_scheduler(context_schedule)
         total_steps = get_total_steps(
             context_scheduler,
@@ -372,6 +383,25 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
         # 6. Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
+        add_text_embeds = pooled_prompt_embeds
+        add_time_ids = self._get_add_time_ids(
+            (height, width), crops_coords_top_left, (height, width), dtype=prompt_embeds.dtype
+        )
+        if negative_original_size is not None and negative_target_size is not None:
+            negative_add_time_ids = self._get_add_time_ids(
+                negative_original_size,
+                negative_crops_coords_top_left,
+                negative_target_size,
+                dtype=prompt_embeds.dtype,
+            )
+        else:
+            negative_add_time_ids = add_time_ids
+
+        if do_classifier_free_guidance:
+            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
+            add_text_embeds = torch.cat([negative_pooled_prompt_embeds, add_text_embeds], dim=0)
+            add_time_ids = torch.cat([negative_add_time_ids, add_time_ids], dim=0)
+
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=total_steps * strength) as progress_bar:
@@ -395,13 +425,14 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
                         .repeat(2 if do_classifier_free_guidance else 1, 1, 1, 1, 1)
                     )
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
+                    added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
                     # predict the noise residual
                     pred = self.unet(
                         latent_model_input.to(self.unet.device, self.unet.dtype),
                         t,
                         encoder_hidden_states=prompt_embeds,
                         cross_attention_kwargs=cross_attention_kwargs,
+                        added_cond_kwargs=added_cond_kwargs,
                         return_dict=False,
                     )[0]
 
@@ -478,3 +509,39 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
         _ = self.vae.eval()
         self.vae = self.vae.requires_grad_(False)
         self.vae.train = nop_train
+
+
+if __name__ == '__main__':
+    pipe = AnimationPipelineSDXL.from_pretrained("data/models/huggingface/sdxl",
+                                                 torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
+    pipe.unet = UNet3DConditionModel.from_pretrained_2d(
+        "data/models/huggingface/sdxl", subfolder="unet",
+        unet_additional_kwargs={
+            "use_motion_module": True,
+            "motion_module_resolutions": [1, 2, 4, 8],
+            "unet_use_cross_frame_attention": False,
+            "unet_use_temporal_attention": False,
+            "sdxl": True,
+            "motion_module_type": "Vanilla",
+            "motion_module_kwargs": {
+                "num_attention_heads": 8,
+                "num_transformer_block": 1,
+                "attention_block_types": ["Temporal_Self", "Temporal_Self"],
+                "temporal_position_encoding": True,
+                "temporal_position_encoding_max_len": 24,
+                "temporal_attention_dim_div": 1,
+                "zero_initialize": True}
+        },
+        motion_module_path=None
+    ).half()
+    pipe.vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float32)
+    pipe.to(torch.device(0))
+    sample = pipe(
+        "an apple",
+        height=768,
+        width=768,
+        video_length=10,
+        num_inference_steps=30,
+        context_frames=16
+    ).videos
+    save_videos_grid(sample, "test.gif")

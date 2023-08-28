@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+from diffusers.models.embeddings import TextImageTimeEmbedding
 from torch import Tensor
 
 from animatediff.models.utils import Timesteps, TimestepEmbedding
@@ -88,13 +90,15 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         motion_module_kwargs=None,
         unet_use_cross_frame_attention=None,
         unet_use_temporal_attention=None,
+        addition_embed_type=None,
+        addition_time_embed_dim=None,
+        projection_class_embeddings_input_dim=None
     ):
         super().__init__()
         if motion_module_kwargs is None:
             motion_module_kwargs = {}
         self.sample_size = sample_size
         time_embed_dim = block_out_channels[0] * 4
-
         # input
         self.conv_in = InflatedConv3d(in_channels, block_out_channels[0], kernel_size=3, padding=(1, 1))
 
@@ -103,6 +107,10 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         timestep_input_dim = block_out_channels[0]
 
         self.time_embedding = TimestepEmbedding(timestep_input_dim, time_embed_dim)
+
+        if addition_embed_type == "text_time":
+            self.add_time_proj = Timesteps(addition_time_embed_dim, flip_sin_to_cos, freq_shift)
+            self.add_embedding = TimestepEmbedding(projection_class_embeddings_input_dim, time_embed_dim)
 
         # class embedding
         if class_embed_type is None and num_class_embeds is not None:

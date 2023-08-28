@@ -52,7 +52,7 @@ class YoutubeTuneAVideoDataset(Dataset):
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
         ])
 
-    def cleanup_if_full(self, limit=20):
+    def cleanup_if_full(self, limit=50):
         cache_size = sum(os.path.getsize(os.path.join(dirpath, filename)) for dirpath, dirnames, filenames in
                          os.walk(self.store_dir) for filename in filenames) // (1024 ** 3)
         if cache_size > limit:

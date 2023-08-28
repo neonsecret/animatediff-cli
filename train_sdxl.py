@@ -217,11 +217,11 @@ def main(
         print(f"trainable params scale: {sum(p.numel() for p in trainable_params) / 1e6:.3f} M")
 
     # Enable xformers
-    if enable_xformers_memory_efficient_attention:
-        if is_xformers_available():
-            unet.enable_xformers_memory_efficient_attention()
-        else:
-            raise ValueError("xformers is not available. Make sure it is installed correctly")
+    # if enable_xformers_memory_efficient_attention:
+    #     if is_xformers_available():
+    #         unet.enable_xformers_memory_efficient_attention()
+    #     else:
+    #         raise ValueError("xformers is not available. Make sure it is installed correctly")
 
     # Enable gradient checkpointing
     if gradient_checkpointing:
@@ -268,7 +268,7 @@ def main(
     # Validation pipeline
     validation_pipeline = AnimationPipelineSDXL.from_pretrained(pretrained_model_path, torch_dtype=torch.float16,
                                                                 variant="fp16", use_safetensors=True).to("cuda")
-    validation_pipeline.unet = unet
+    validation_pipeline.unet = unet.to(validation_pipeline.dtype)
 
     vae = validation_pipeline.vae
 
@@ -335,17 +335,13 @@ def main(
             ### >>>> Training >>>> ###
 
             # Convert videos to latent space
-            pixel_values = batch["pixel_values"].to(local_rank)
+            pixel_values = batch["pixel_values"].to(local_rank).to(vae.dtype)
             video_length = pixel_values.shape[1]
             with torch.no_grad():
-                if not image_finetune:
-                    pixel_values = rearrange(pixel_values, "b f c h w -> (b f) c h w")
-                    latents = vae.encode(pixel_values).latent_dist
-                    latents = latents.sample()
-                    latents = rearrange(latents, "(b f) c h w -> b c f h w", f=video_length)
-                else:
-                    latents = vae.encode(pixel_values).latent_dist
-                    latents = latents.sample()
+                pixel_values = rearrange(pixel_values, "b f c h w -> (b f) c h w")
+                latents = vae.encode(pixel_values).latent_dist
+                latents = latents.sample()
+                latents = rearrange(latents, "(b f) c h w -> b c f h w", f=video_length)
 
                 latents = latents * 0.18215
 
@@ -363,7 +359,7 @@ def main(
 
             # Get the text embedding for conditioning
             with torch.no_grad():
-                encoder_hidden_states = validation_pipeline.encode_prompt(batch['text'])
+                encoder_hidden_states = validation_pipeline.encode_prompt(batch['text'])[0]
 
             # Get the target for loss depending on the prediction type
             if noise_scheduler.config.prediction_type == "epsilon":
@@ -435,29 +431,16 @@ def main(
                     not image_finetune) else validation_data.prompts
 
                 for idx, prompt in enumerate(prompts):
-                    if not image_finetune:
-                        sample = validation_pipeline(
-                            prompt,
-                            # generator=generator,
-                            video_length=train_data.sample_n_frames,
-                            height=height,
-                            width=width,
-                            **validation_data,
-                        ).videos
-                        save_videos_grid(sample, f"{output_dir}/samples/sample-{global_step}/{idx}.gif")
-                        samples.append(sample)
-
-                    else:
-                        sample = validation_pipeline(
-                            prompt,
-                            # generator=generator,
-                            height=height,
-                            width=width,
-                            num_inference_steps=validation_data.get("num_inference_steps", 25),
-                            guidance_scale=validation_data.get("guidance_scale", 8.),
-                        ).images[0]
-                        sample = torchvision.transforms.functional.to_tensor(sample)
-                        samples.append(sample)
+                    sample = validation_pipeline(
+                        prompt,
+                        # generator=generator,
+                        video_length=train_data.sample_n_frames,
+                        height=height,
+                        width=width,
+                        **validation_data,
+                    ).videos
+                    save_videos_grid(sample, f"{output_dir}/samples/sample-{global_step}/{idx}.gif")
+                    samples.append(sample)
 
                 if not image_finetune:
                     samples = torch.concat(samples)
