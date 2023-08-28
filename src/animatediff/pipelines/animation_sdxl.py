@@ -16,7 +16,7 @@ from diffusers.utils import (
     randn_tensor,
 )
 from einops import rearrange
-from tqdm.rich import tqdm
+from tqdm import tqdm
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from animatediff.models.unet import UNet3DConditionModel
@@ -425,8 +425,8 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
                         .repeat(2 if do_classifier_free_guidance else 1, 1, 1, 1, 1)
                     )
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+
                     added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
-                    # predict the noise residual
                     pred = self.unet(
                         latent_model_input.to(self.unet.device, self.unet.dtype),
                         t,
@@ -530,18 +530,19 @@ if __name__ == '__main__':
                 "temporal_position_encoding": True,
                 "temporal_position_encoding_max_len": 24,
                 "temporal_attention_dim_div": 1,
-                "zero_initialize": True}
+                "zero_initialize": True
+            }
         },
         motion_module_path=None
-    ).half()
-    pipe.vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float32)
+    ).to(torch.float16)
     pipe.to(torch.device(0))
     sample = pipe(
         "an apple",
-        height=768,
-        width=768,
-        video_length=10,
-        num_inference_steps=30,
-        context_frames=16
+        height=512,
+        width=512,
+        video_length=12,
+        num_inference_steps=20,
+        context_frames=12
     ).videos
+    print(sample)
     save_videos_grid(sample, "test.gif")

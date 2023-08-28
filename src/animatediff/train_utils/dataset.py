@@ -34,7 +34,7 @@ class YoutubeTuneAVideoDataset(Dataset):
     ):
         df = pd.read_csv(csv_path, header=None)
         self.items = df.to_dict('records')
-        random.shuffle(self.items)
+        # random.shuffle(self.items)
 
         self.width = width
         self.height = height
@@ -66,27 +66,32 @@ class YoutubeTuneAVideoDataset(Dataset):
     def fetch_video(self, index, filename):
         video_idx = self.items[index][0]
         caption = self.items[index][3]
-        # start, end = self.items[index][1] / 1e+06, self.items[index][2] / 1e+06
+        start, end = self.items[index][1] / 1e+06, self.items[index][2] / 1e+06
+
+        # print(start, end)
+        if end - start < self.n_sample_frames:
+            end += (self.n_sample_frames - (end - start))
+            print(start, end)
 
         filename = filename.replace("tmp.mp4", f"{video_idx}.mp4")
 
         if os.path.exists(filename):
             return caption, filename
 
-        # start_filename = filename.replace(".mp4", "raw.mp4")
+        start_filename = filename.replace(".mp4", "raw.mp4")
         s = YouTube(f'https://youtu.be/{video_idx}').streams
         if self.quality == "best":
-            s.get_highest_resolution().download(filename=filename)
+            s.get_highest_resolution().download(filename=start_filename)
         else:
-            s.get_by_resolution(self.quality).download(filename=filename)
-        # (
-        #     ffmpeg
-        #     .input(start_filename)
-        #     .trim(start_frame=start, end_frame=end)
-        #     .output(filename, loglevel="quiet")
-        #     .run(overwrite_output=True)
-        # )
-        # os.remove(start_filename)
+            s.get_by_resolution(self.quality).download(filename=start_filename)
+        (
+            ffmpeg
+            .input(start_filename)
+            .trim(start_frame=start, end_frame=end)
+            .output(filename, loglevel="quiet")
+            .run(overwrite_output=True)
+        )
+        os.remove(start_filename)
 
         return caption, filename
 
@@ -116,7 +121,9 @@ class YoutubeTuneAVideoDataset(Dataset):
 
 
 if __name__ == '__main__':
-    d = YoutubeTuneAVideoDataset("video_cc_public.csv")
-    dataloader = torch.utils.data.DataLoader(d, batch_size=4, num_workers=16)
-    for idx, batch in enumerate(dataloader):
+    from tqdm import tqdm
+
+    dataset = YoutubeTuneAVideoDataset("test.csv")
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=4, num_workers=4)
+    for idx, batch in tqdm(enumerate(dataloader), total=len(dataset)):
         print(batch["pixel_values"].shape, len(batch["text"]))
