@@ -1,13 +1,14 @@
 image_finetune: false
 
 output_dir: "outputs"
-pretrained_model_path: "data/models/huggingface/stable-diffusion-v1-5"
+pretrained_model_path: "data/models/huggingface/sdxl"
 
 unet_additional_kwargs:
   use_motion_module: true
   motion_module_resolutions: [ 1,2,4,8 ]
   unet_use_cross_frame_attention: false
   unet_use_temporal_attention: false
+  sdxl: true
 
   motion_module_type: Vanilla
   motion_module_kwargs:
@@ -30,19 +31,20 @@ noise_scheduler_kwargs:
 train_data:
   csv_path: "video_cc_public.csv"
   n_sample_frames: 8
-  width: 512
-  height: 512
+  width: 1024
+  height: 1024
   sample_start_idx: 0
   sample_frame_rate: 1
   sample_n_frames: 16
+  quality: "best"
 
 validation_data:
   prompts:
-    - "A spinning apple, on the table"
+    - "Snow rocky mountains peaks canyon. Snow blanketed rocky mountains surround and shadow deep canyons."
+    - "A drone view of celebration with Christma tree and fireworks, starry sky - background."
   num_inference_steps: 25
   guidance_scale: 8.
   context_frames: 16
-  init_test_image: apple.png
 
 trainable_modules:
   - "motion_modules."
@@ -50,15 +52,16 @@ trainable_modules:
 unet_checkpoint_path: ""
 
 learning_rate: 1.e-4
-train_batch_size: 2
+train_batch_size: 1
+gradient_accumulation_steps: 3
 
 max_train_epoch: 10
-max_train_steps: 100
+max_train_steps: 1000
 checkpointing_epochs: -1
 checkpointing_steps: 60
 
-validation_steps: 5000
-validation_steps_tuple: [ 2, 50 ]
+validation_steps: 100
+validation_steps_tuple: [ 2, 50]
 
 global_seed: 42
 mixed_precision_training: true

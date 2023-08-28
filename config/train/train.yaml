@@ -28,7 +28,7 @@ noise_scheduler_kwargs:
   clip_sample: false
 
 train_data:
-  csv_path: "D:/datasets/test.csv"
+  csv_path: "video_cc_public.csv"
   n_sample_frames: 8
   width: 512
   height: 512

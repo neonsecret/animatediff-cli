@@ -28,6 +28,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         sample_frame_rate: int = 1,
         filename: str = "tmp.mp4",
         store_dir: str = "tmp/",
+        quality="360p",
         *args,
         **kwargs
     ):
@@ -43,7 +44,7 @@ class YoutubeTuneAVideoDataset(Dataset):
         self.filename = os.path.join(store_dir, filename)
         self.store_dir = store_dir
         os.makedirs(store_dir, exist_ok=True)
-
+        self.quality = quality
         self.pixel_transforms = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.Resize(width, antialias=True),
@@ -73,9 +74,11 @@ class YoutubeTuneAVideoDataset(Dataset):
             return caption, filename
 
         # start_filename = filename.replace(".mp4", "raw.mp4")
-
-        s = YouTube(f'https://youtu.be/{video_idx}').streams.get_by_resolution("360p")
-        s.download(filename=filename)
+        s = YouTube(f'https://youtu.be/{video_idx}').streams
+        if self.quality == "best":
+            s.get_highest_resolution().download(filename=filename)
+        else:
+            s.get_by_resolution(self.quality).download(filename=filename)
         # (
         #     ffmpeg
         #     .input(start_filename)
@@ -113,7 +116,7 @@ class YoutubeTuneAVideoDataset(Dataset):
 
 
 if __name__ == '__main__':
-    d = YoutubeTuneAVideoDataset("D:/datasets/test.csv")
+    d = YoutubeTuneAVideoDataset("video_cc_public.csv")
     dataloader = torch.utils.data.DataLoader(d, batch_size=4, num_workers=16)
     for idx, batch in enumerate(dataloader):
         print(batch["pixel_values"].shape, len(batch["text"]))

@@ -90,7 +90,6 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         unet_use_temporal_attention=None,
     ):
         super().__init__()
-
         if motion_module_kwargs is None:
             motion_module_kwargs = {}
         self.sample_size = sample_size
@@ -494,13 +493,12 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
     @classmethod
     def from_pretrained_2d(
         cls: "UNet3DConditionModel",
-        pretrained_model_path: PathLike,
-        motion_module_path: PathLike,
+        pretrained_model_path: PathLike | str,
+        motion_module_path: PathLike | None,
         subfolder: Optional[str] = None,
         unet_additional_kwargs: Optional[dict] = None,
     ):
         pretrained_model_path = Path(pretrained_model_path)
-        motion_module_path = Path(motion_module_path)
         if subfolder is not None:
             pretrained_model_path = pretrained_model_path.joinpath(subfolder)
 
@@ -512,18 +510,30 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
         unet_config = cls.load_config(config_file)
         unet_config["_class_name"] = cls.__name__
-        unet_config["down_block_types"] = [
-            "CrossAttnDownBlock3D",
-            "CrossAttnDownBlock3D",
-            "CrossAttnDownBlock3D",
-            "DownBlock3D",
-        ]
-        unet_config["up_block_types"] = [
-            "UpBlock3D",
-            "CrossAttnUpBlock3D",
-            "CrossAttnUpBlock3D",
-            "CrossAttnUpBlock3D",
-        ]
+        if unet_additional_kwargs["sdxl"]:
+            unet_config["down_block_types"] = [
+                "DownBlock3D",
+                "CrossAttnDownBlock3D",
+                "CrossAttnDownBlock3D",
+            ]
+            unet_config["up_block_types"] = [
+                "CrossAttnUpBlock3D",
+                "CrossAttnUpBlock3D",
+                "UpBlock3D",
+            ]
+        else:
+            unet_config["down_block_types"] = [
+                "CrossAttnDownBlock3D",
+                "CrossAttnDownBlock3D",
+                "CrossAttnDownBlock3D",
+                "DownBlock3D",
+            ]
+            unet_config["up_block_types"] = [
+                "UpBlock3D",
+                "CrossAttnUpBlock3D",
+                "CrossAttnUpBlock3D",
+                "CrossAttnUpBlock3D",
+            ]
         unet_config["mid_block_type"] = "UNetMidBlock3DCrossAttn"
 
         model: nn.Module = cls.from_config(unet_config, **unet_additional_kwargs)
@@ -541,21 +551,22 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         else:
             raise FileNotFoundError(f"no weights file found in {pretrained_model_path}")
 
-        # load the motion module weights
-        if motion_module_path.exists() and motion_module_path.is_file():
-            if motion_module_path.suffix.lower() in [".pth", ".pt", ".ckpt"]:
-                motion_state_dict = torch.load(motion_module_path, map_location="cpu", weights_only=True)
-            elif motion_module_path.suffix.lower() == ".safetensors":
-                motion_state_dict = load_file(motion_module_path, device="cpu")
+        if motion_module_path is not None:
+            motion_module_path = Path(motion_module_path)
+            # load the motion module weights
+            if motion_module_path.exists() and motion_module_path.is_file():
+                if motion_module_path.suffix.lower() in [".pth", ".pt", ".ckpt"]:
+                    motion_state_dict = torch.load(motion_module_path, map_location="cpu", weights_only=True)
+                elif motion_module_path.suffix.lower() == ".safetensors":
+                    motion_state_dict = load_file(motion_module_path, device="cpu")
+                else:
+                    raise RuntimeError(
+                        f"unknown file format for motion module weights: {motion_module_path.suffix}"
+                    )
             else:
-                raise RuntimeError(
-                    f"unknown file format for motion module weights: {motion_module_path.suffix}"
-                )
-        else:
-            raise FileNotFoundError(f"no motion module weights found in {motion_module_path}")
-
-        # merge the state dicts
-        state_dict.update(motion_state_dict)
+                raise FileNotFoundError(f"no motion module weights found in {motion_module_path}")
+            # merge the state dicts
+            state_dict.update(motion_state_dict)
 
         # load the weights into the model
         m, u = model.load_state_dict(state_dict, strict=False)
