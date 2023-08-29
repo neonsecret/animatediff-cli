@@ -480,7 +480,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
             ]
             init_latents = torch.cat(init_latents, dim=0)
         else:
-            init_latents = self.vae.encode(image).latent_dist.sample(generator)
+            init_latents = self.vae.encode(image.to(self.vae.device)).latent_dist.sample(generator)
 
         init_latents = self.vae.config.scaling_factor * init_latents
 
@@ -503,7 +503,7 @@ class AnimationPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
             init_latents = torch.cat([init_latents], dim=0)
 
         init_latents = init_latents.unsqueeze(2).repeat((1, 1, video_length, 1, 1))  # the video part
-        noise = randn_tensor(init_latents.shape, generator=generator, device=device, dtype=dtype)
+        noise = randn_tensor(init_latents.shape, generator=generator, device=init_latents.device, dtype=dtype)
 
         init_latents = self.scheduler.add_noise(init_latents, noise, timestep)
         # scale the initial noise by the standard deviation required by the scheduler
