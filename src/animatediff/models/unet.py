@@ -518,7 +518,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
         unet_config = cls.load_config(config_file)
         unet_config["_class_name"] = cls.__name__
-        if unet_additional_kwargs["sdxl"]:
+        if "sdxl" in unet_additional_kwargs and unet_additional_kwargs["sdxl"]:
             unet_config["down_block_types"] = [
                 "DownBlock3D",
                 "CrossAttnDownBlock3D",

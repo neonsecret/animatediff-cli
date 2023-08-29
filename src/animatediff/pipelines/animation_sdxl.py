@@ -512,9 +512,7 @@ class AnimationPipelineSDXL(StableDiffusionXLPipeline):
 
 
 if __name__ == '__main__':
-    pipe = AnimationPipelineSDXL.from_pretrained("data/models/huggingface/sdxl",
-                                                 torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    pipe.unet = UNet3DConditionModel.from_pretrained_2d(
+    unet = UNet3DConditionModel.from_pretrained_2d(
         "data/models/huggingface/sdxl", subfolder="unet",
         unet_additional_kwargs={
             "use_motion_module": True,
@@ -535,14 +533,16 @@ if __name__ == '__main__':
         },
         motion_module_path=None
     ).to(torch.float16)
+    pipe = AnimationPipelineSDXL.from_pretrained("data/models/huggingface/sdxl", unet=unet,
+                                                 torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
     pipe.to(torch.device(0))
     sample = pipe(
         "an apple",
         height=512,
         width=512,
-        video_length=12,
+        video_length=10,
         num_inference_steps=20,
-        context_frames=12
+        context_frames=16
     ).videos
     print(sample)
     save_videos_grid(sample, "test.gif")

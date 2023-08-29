@@ -57,7 +57,10 @@ class YoutubeTuneAVideoDataset(Dataset):
                          os.walk(self.store_dir) for filename in filenames) // (1024 ** 3)
         if cache_size > limit:
             print("Clearing cache")
-            shutil.rmtree(self.store_dir)
+            try:
+                shutil.rmtree(self.store_dir)
+            except:
+                pass
             os.makedirs(self.store_dir, exist_ok=True)
 
     def __len__(self):
@@ -69,42 +72,41 @@ class YoutubeTuneAVideoDataset(Dataset):
         start, end = self.items[index][1] / 1e+06, self.items[index][2] / 1e+06
 
         # print(start, end)
-        if end - start < self.n_sample_frames:
-            end += (self.n_sample_frames - (end - start))
-            print(start, end)
+        end += (self.n_sample_frames - (end - start))
+        start, end = int(start), int(end)
 
         filename = filename.replace("tmp.mp4", f"{video_idx}.mp4")
 
         if os.path.exists(filename):
             return caption, filename
 
-        start_filename = filename.replace(".mp4", "raw.mp4")
+        # start_filename = filename.replace(".mp4", "raw.mp4")
         s = YouTube(f'https://youtu.be/{video_idx}').streams
         if self.quality == "best":
-            s.get_highest_resolution().download(filename=start_filename)
+            s.get_highest_resolution().download(filename=filename)
         else:
-            s.get_by_resolution(self.quality).download(filename=start_filename)
-        (
-            ffmpeg
-            .input(start_filename)
-            .trim(start_frame=start, end_frame=end)
-            .output(filename, loglevel="quiet")
-            .run(overwrite_output=True)
-        )
-        os.remove(start_filename)
+            s.get_by_resolution(self.quality).download(filename=filename)
+        # (
+        #     ffmpeg
+        #     .input(start_filename)
+        #     .trim(start_frame=start, end_frame=end)
+        #     .output(filename, loglevel="quiet")
+        #     .run(overwrite_output=True)
+        # )
+        # os.remove(start_filename)
 
-        return caption, filename
+        return caption, filename, (start, end)
 
     def __getitem__(self, index):
         self.cleanup_if_full()
 
         # load and sample video frames
         try:
-            text, filename = self.fetch_video(index, self.filename)
+            text, filename, (start, end) = self.fetch_video(index, self.filename)
             vr = decord.VideoReader(filename, width=self.width, height=self.height)
         except:
             return self.__getitem__(index + 1)
-        sample_index = list(range(self.sample_start_idx, len(vr), self.sample_frame_rate))[:self.n_sample_frames]
+        sample_index = list(range(self.sample_start_idx, len(vr), self.sample_frame_rate))[start:end]
         video = vr.get_batch(sample_index)
 
         pixel_values = video.permute(0, 3, 1, 2).contiguous()

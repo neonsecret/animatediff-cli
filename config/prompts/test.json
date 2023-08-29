@@ -1,8 +1,8 @@
 {
   "name": "RealisticVision",
   "base": "",
-  "path": "models/sd/aZovyaRPGArtistTools_v3.safetensors",
-  "motion_module": "models/motion-module/mm_sd_v15.safetensors",
+  "path": "models/sd/realisticVisionV51_v51VAE.safetensors",
+  "motion_module": "models/motion-module/motion.ckpt",
   "seed": [
     1897357888
   ],
@@ -15,8 +15,5 @@
   ],
   "n_prompt": [
     "(worse quality, low quality:1.2), normal quality, bad quality, glitch, watermark, extra hands, fused fingers, fused hands, deformed, (fused nipples), poorly drawn face, (poorly drawn nipples)"
-  ],
-  "init_image_path": [
-    "C:\\Users\\neon\\Downloads\\Telegram Desktop/alexandrabuzuk-02-07-2023-0001.jpg"
   ]
 }
