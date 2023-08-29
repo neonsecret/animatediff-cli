@@ -316,7 +316,7 @@ def generate(
             # allow for reusing the same negative prompt(s) and seed(s) for multiple prompts
             n_prompt = model_config.n_prompt[idx % num_negatives]
             seed = model_config.seed[idx % num_seeds]
-            init_image = Image.open(model_config.init_image_path[idx % num_init_imgs]).resize((width, height))
+            init_image = Image.open(model_config.init_image_path[idx % num_init_imgs]).resize((width, height)).convert("RGB")
             strength = model_config.strength
 
             # duplicated in run_inference, but this lets us use it for frame save dirs
